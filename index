@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa Colaborativo de Cidades do Brasil</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Leaflet.js for the interactive map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha26-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* Custom styles to match the color palette and improve UI */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F9F9F9;
+            color: #434344;
+            overflow: hidden; /* Prevent scrolling of the whole page */
+        }
+        /* Custom Leaflet pin icon using one of the theme colors */
+        .custom-pin-icon {
+            background-color: #FC0019; /* Red */
+            border-radius: 50% 50% 50% 0;
+            width: 20px;
+            height: 20px;
+            transform: rotate(-45deg);
+            border: 2px solid #FFFFFF;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        /* Loading spinner style */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #1E40FB; /* Blue */
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Ensure map has a defined size */
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+        /* Style for disabled select elements */
+        select:disabled {
+            background-color: #e9ecef;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <!-- Main container using Flexbox to fill the screen height -->
+    <div class="h-screen flex flex-col lg:flex-row p-4 lg:p-8 gap-8">
+
+        <!-- Form and Control Panel -->
+        <div class="w-full lg:w-1/3 lg:max-w-md bg-white p-8 rounded-2xl shadow-lg border border-gray-200 lg:flex-shrink-0 overflow-y-auto">
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-bold text-[#434344]">Mapa de Cidades</h1>
+                <p class="text-gray-500 mt-2">Selecione uma localidade para marcá-la no mapa.</p>
+            </div>
+
+            <!-- Form for user input -->
+            <form id="locationForm" class="space-y-4">
+                <div>
+                    <label for="regiao" class="block text-sm font-medium text-gray-700 mb-1">Região</label>
+                    <select id="regiao" name="regiao" required class="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E40FB] focus:border-[#1E40FB] transition-all">
+                        <option value="">Selecione a Região</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="estado" class="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+                    <select id="estado" name="estado" required disabled class="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E40FB] focus:border-[#1E40FB] transition-all">
+                        <option value="">Selecione o Estado</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="cidade" class="block text-sm font-medium text-gray-700 mb-1">Cidade</label>
+                    <select id="cidade" name="cidade" required disabled class="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1E40FB] focus:border-[#1E40FB] transition-all">
+                        <option value="">Selecione a Cidade</option>
+                    </select>
+                </div>
+                <button type="submit" id="submitButton" disabled
+                        class="w-full bg-[#1E40FB] text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all duration-300 flex items-center justify-center disabled:bg-blue-300 disabled:cursor-not-allowed">
+                    <span id="buttonText">Marcar no Mapa</span>
+                    <div id="loadingSpinner" class="loader hidden ml-3"></div>
+                </button>
+            </form>
+            
+            <!-- Message area for feedback -->
+            <div id="message" class="mt-4 text-center text-sm font-medium"></div>
+        </div>
+
+        <!-- Map Container - set to grow and fill available space -->
+        <div class="flex-grow h-full w-full bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
+            <div id="map"></div>
+        </div>
+
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Import necessary Firebase functions
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, onSnapshot, addDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+        // --- CONFIGURATION ---
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-map-app';
+        
+        // --- FIREBASE INITIALIZATION ---
+        let db, auth;
+        try {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            setLogLevel('debug'); // Enable detailed logs for debugging
+        } catch (e) {
+            console.error("Firebase initialization failed:", e);
+            document.getElementById('message').textContent = 'Erro ao conectar com o serviço de mapa.';
+        }
+
+        // --- MAP INITIALIZATION ---
+        const map = L.map('map').setView([-14.2350, -51.9253], 4);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        const markersLayer = L.layerGroup().addTo(map);
+        const addedLocations = new Set();
+        const redPinIcon = L.divIcon({
+            className: 'custom-pin-icon',
+            iconSize: [20, 20],
+            iconAnchor: [0, 20],
+            popupAnchor: [10, -20]
+        });
+        
+        // --- AUTHENTICATION ---
+        const authenticateUser = async () => {
+            if (!auth) return;
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                console.log("User authenticated. UID:", auth.currentUser?.uid);
+                listenForLocations();
+            } catch (error) {
+                console.error("Authentication failed:", error);
+                document.getElementById('message').textContent = 'Falha na autenticação para carregar o mapa.';
+            }
+        };
+
+        // --- FIRESTORE & MAP LOGIC ---
+        const locationsCollection = collection(db, `artifacts/${appId}/public/data/locations`);
+        const listenForLocations = () => {
+            onSnapshot(locationsCollection, (snapshot) => {
+                snapshot.docChanges().forEach((change) => {
+                    if (change.type === "added") {
+                        const location = change.doc.data();
+                        const locationId = `${location.lat},${location.lon}`;
+                        if (!addedLocations.has(locationId)) {
+                            L.marker([location.lat, location.lon], { icon: redPinIcon })
+                                .bindPopup(`<b>${location.city}</b><br>${location.state}`)
+                                .addTo(markersLayer);
+                            addedLocations.add(locationId);
+                        }
+                    }
+                });
+            }, (error) => {
+                console.error("Error listening to Firestore:", error);
+                document.getElementById('message').textContent = 'Erro ao carregar os locais do mapa.';
+            });
+        };
+
+        // --- FORM HANDLING & IBGE API ---
+        const form = document.getElementById('locationForm');
+        const messageDiv = document.getElementById('message');
+        const submitButton = document.getElementById('submitButton');
+        const buttonText = document.getElementById('buttonText');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const regiaoSelect = document.getElementById('regiao');
+        const estadoSelect = document.getElementById('estado');
+        const cidadeSelect = document.getElementById('cidade');
+
+        // Populate Regions
+        async function loadRegioes() {
+            try {
+                const response = await fetch('https://servicodados.ibge.gov.br/api/v1/localidades/regioes?orderBy=nome');
+                const regioes = await response.json();
+                regioes.forEach(regiao => {
+                    const option = new Option(regiao.nome, regiao.id);
+                    regiaoSelect.add(option);
+                });
+            } catch (error) {
+                console.error("Failed to load regions:", error);
+                showFeedback('Erro ao carregar regiões.', 'error');
+            }
+        }
+
+        // Populate States based on Region
+        regiaoSelect.addEventListener('change', async () => {
+            const regiaoId = regiaoSelect.value;
+            resetSelect(estadoSelect, 'Estado');
+            resetSelect(cidadeSelect, 'Cidade');
+            estadoSelect.disabled = true;
+            cidadeSelect.disabled = true;
+            submitButton.disabled = true;
+
+            if (!regiaoId) return;
+
+            estadoSelect.innerHTML = '<option value="">Carregando...</option>';
+            try {
+                const response = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/regioes/${regiaoId}/estados?orderBy=nome`);
+                const estados = await response.json();
+                resetSelect(estadoSelect, 'Estado');
+                estados.forEach(estado => {
+                    const option = new Option(estado.nome, estado.sigla);
+                    estadoSelect.add(option);
+                });
+                estadoSelect.disabled = false;
+            } catch (error) {
+                console.error("Failed to load states:", error);
+                showFeedback('Erro ao carregar estados.', 'error');
+                resetSelect(estadoSelect, 'Estado');
+            }
+        });
+
+        // Populate Cities based on State
+        estadoSelect.addEventListener('change', async () => {
+            const estadoUf = estadoSelect.value;
+            resetSelect(cidadeSelect, 'Cidade');
+            cidadeSelect.disabled = true;
+            submitButton.disabled = true;
+
+            if (!estadoUf) return;
+            
+            cidadeSelect.innerHTML = '<option value="">Carregando...</option>';
+            try {
+                const response = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${estadoUf}/municipios?orderBy=nome`);
+                const cidades = await response.json();
+                resetSelect(cidadeSelect, 'Cidade');
+                cidades.forEach(cidade => {
+                    const option = new Option(cidade.nome, cidade.nome);
+                    cidadeSelect.add(option);
+                });
+                cidadeSelect.disabled = false;
+            } catch (error) {
+                console.error("Failed to load cities:", error);
+                showFeedback('Erro ao carregar cidades.', 'error');
+                resetSelect(cidadeSelect, 'Cidade');
+            }
+        });
+        
+        cidadeSelect.addEventListener('change', () => {
+             submitButton.disabled = !cidadeSelect.value;
+        });
+
+        // Form Submission
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            buttonText.textContent = 'Buscando...';
+            loadingSpinner.classList.remove('hidden');
+            submitButton.disabled = true;
+            messageDiv.textContent = '';
+
+            const cidade = cidadeSelect.value;
+            const estado = estadoSelect.options[estadoSelect.selectedIndex].text;
+
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?city=${cidade}&state=${estado}&country=Brazil&format=json&limit=1`);
+                const data = await response.json();
+
+                if (data && data.length > 0) {
+                    const { lat, lon } = data[0];
+                    const newLocation = { city: cidade, state: estado, lat: parseFloat(lat), lon: parseFloat(lon) };
+                    await addDoc(locationsCollection, newLocation);
+                    showFeedback(`${cidade}, ${estado} adicionado ao mapa!`, 'success');
+                    map.flyTo([lat, lon], 10);
+                } else {
+                    showFeedback('Não foi possível geolocalizar a cidade. Tente novamente.', 'error');
+                }
+            } catch (error) {
+                console.error("Error during geocoding or saving:", error);
+                showFeedback('Ocorreu um erro. Tente novamente mais tarde.', 'error');
+            } finally {
+                resetButton();
+            }
+        });
+
+        // --- UI HELPER FUNCTIONS ---
+        function showFeedback(text, type) {
+            messageDiv.textContent = text;
+            messageDiv.style.color = type === 'success' ? '#1FD025' : '#FC0019';
+        }
+        
+        function resetButton() {
+            buttonText.textContent = 'Marcar no Mapa';
+            loadingSpinner.classList.add('hidden');
+            submitButton.disabled = !cidadeSelect.value; // Re-enable only if a city is selected
+        }
+        
+        function resetSelect(selectElement, placeholder) {
+            selectElement.innerHTML = `<option value="">Selecione ${placeholder}</option>`;
+        }
+
+        // --- START THE APP ---
+        authenticateUser();
+        loadRegioes();
+
+    </script>
+</body>
+</html>

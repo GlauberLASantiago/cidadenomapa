@@ -118,19 +118,35 @@
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
         // --- CONFIGURATION ---
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const rawFirebaseConfig = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
+        let firebaseConfig = {};
+        try {
+            firebaseConfig = JSON.parse(rawFirebaseConfig);
+        } catch (error) {
+            console.error("Invalid Firebase config JSON:", error);
+        }
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-map-app';
+        const hasFirebaseConfig = Boolean(
+            firebaseConfig &&
+            firebaseConfig.apiKey &&
+            firebaseConfig.authDomain &&
+            firebaseConfig.projectId
+        );
         
         // --- FIREBASE INITIALIZATION ---
-        let db, auth;
+        let db, auth, locationsCollection;
         try {
+            if (!hasFirebaseConfig) {
+                throw new Error("Firebase config is missing required fields.");
+            }
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
             auth = getAuth(app);
+            locationsCollection = collection(db, `artifacts/${appId}/public/data/locations`);
             setLogLevel('debug'); // Enable detailed logs for debugging
         } catch (e) {
             console.error("Firebase initialization failed:", e);
-            document.getElementById('message').textContent = 'Erro ao conectar com o serviço de mapa.';
+            document.getElementById('message').textContent = 'Serviço colaborativo do mapa indisponível no momento.';
         }
 
         // --- MAP INITIALIZATION ---
@@ -149,7 +165,7 @@
         
         // --- AUTHENTICATION ---
         const authenticateUser = async () => {
-            if (!auth) return;
+            if (!auth || !locationsCollection) return;
             try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
@@ -165,8 +181,8 @@
         };
 
         // --- FIRESTORE & MAP LOGIC ---
-        const locationsCollection = collection(db, `artifacts/${appId}/public/data/locations`);
         const listenForLocations = () => {
+            if (!locationsCollection) return;
             onSnapshot(locationsCollection, (snapshot) => {
                 snapshot.docChanges().forEach((change) => {
                     if (change.type === "added") {
@@ -286,10 +302,19 @@
 
                 if (data && data.length > 0) {
                     const { lat, lon } = data[0];
-                    const newLocation = { city: cidade, state: estado, lat: parseFloat(lat), lon: parseFloat(lon) };
-                    await addDoc(locationsCollection, newLocation);
-                    showFeedback(`${cidade}, ${estado} adicionado ao mapa!`, 'success');
-                    map.flyTo([lat, lon], 10);
+                    const parsedLat = parseFloat(lat);
+                    const parsedLon = parseFloat(lon);
+                    if (locationsCollection) {
+                        const newLocation = { city: cidade, state: estado, lat: parsedLat, lon: parsedLon };
+                        await addDoc(locationsCollection, newLocation);
+                        showFeedback(`${cidade}, ${estado} adicionado ao mapa!`, 'success');
+                    } else {
+                        L.marker([parsedLat, parsedLon], { icon: redPinIcon })
+                            .bindPopup(`<b>${cidade}</b><br>${estado}`)
+                            .addTo(markersLayer);
+                        showFeedback(`${cidade}, ${estado} marcado localmente (modo offline).`, 'success');
+                    }
+                    map.flyTo([parsedLat, parsedLon], 10);
                 } else {
                     showFeedback('Não foi possível geolocalizar a cidade. Tente novamente.', 'error');
                 }

@@ -100,7 +100,7 @@
             </form>
             
             <!-- Message area for feedback -->
-            <div id="message" role="status" aria-live="polite" class="mt-4 text-center text-sm font-medium"></div>
+            <div id="message" role="status" aria-live="assertive" class="mt-4 text-center text-sm font-medium"></div>
         </div>
 
         <!-- Map Container - set to grow and fill available space -->
@@ -163,7 +163,10 @@
             iconAnchor: [0, 20],
             popupAnchor: [10, -20]
         });
-        const formatCoordinate = (value) => Number(value).toFixed(6);
+        const formatCoordinate = (value) => {
+            const parsedValue = Number(value);
+            return Number.isFinite(parsedValue) ? parsedValue.toFixed(6) : String(value);
+        };
         const addLocationMarker = (lat, lon, city, state) => {
             const locationId = `${formatCoordinate(lat)},${formatCoordinate(lon)}`;
             if (addedLocations.has(locationId)) {

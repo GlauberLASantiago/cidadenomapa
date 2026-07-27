@@ -126,7 +126,7 @@
             console.error("Invalid Firebase config JSON:", error);
         }
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-map-app';
-        // Explicit validation keeps the app in a predictable fallback (local-only mode without Firestore sync) with clearer diagnostics.
+        // Validate Firebase config to enable local fallback when required fields are missing.
         const requiredFirebaseKeys = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId'];
         const missingFirebaseKeys = requiredFirebaseKeys.filter((key) => !firebaseConfig[key]);
         const hasFirebaseConfig = missingFirebaseKeys.length === 0;
@@ -144,7 +144,7 @@
         } catch (e) {
             console.error("Firebase initialization failed:", e);
             // Fallback when Firebase fails: keep geocoding and map pinning active locally, but disable Firestore sync.
-            document.getElementById('message').textContent = 'Serviço colaborativo indisponível. Usando modo local.';
+            document.getElementById('message').textContent = 'Serviço colaborativo indisponível. Modo local ativo: mapa e marcadores disponíveis.';
         }
         if (db) {
             locationsCollection = collection(db, `artifacts/${appId}/public/data/locations`);

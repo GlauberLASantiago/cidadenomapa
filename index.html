@@ -126,18 +126,15 @@
             console.error("Invalid Firebase config JSON:", error);
         }
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-map-app';
-        const hasFirebaseConfig = Boolean(
-            firebaseConfig &&
-            firebaseConfig.apiKey &&
-            firebaseConfig.authDomain &&
-            firebaseConfig.projectId
-        );
+        const requiredFirebaseKeys = ['apiKey', 'authDomain', 'projectId'];
+        const missingFirebaseKeys = requiredFirebaseKeys.filter((key) => !firebaseConfig?.[key]);
+        const hasFirebaseConfig = missingFirebaseKeys.length === 0;
         
         // --- FIREBASE INITIALIZATION ---
         let db, auth, locationsCollection;
         try {
             if (!hasFirebaseConfig) {
-                throw new Error("Firebase config is missing required fields.");
+                throw new Error(`Firebase config is missing required fields: ${missingFirebaseKeys.join(', ')}`);
             }
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);

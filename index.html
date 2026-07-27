@@ -126,7 +126,7 @@
             console.error("Invalid Firebase config JSON:", error);
         }
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-map-app';
-        // Validate Firebase config to enable local fallback when required fields are missing.
+        // Validate Firebase config (SDK 11.6.1) to enable local fallback when required fields are missing.
         const requiredFirebaseKeys = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId'];
         const missingFirebaseKeys = requiredFirebaseKeys.filter((key) => !firebaseConfig[key]);
         const hasFirebaseConfig = missingFirebaseKeys.length === 0;
@@ -144,7 +144,7 @@
         } catch (e) {
             console.error("Firebase initialization failed:", e);
             // Fallback when Firebase fails: keep geocoding and map pinning active locally, but disable Firestore sync.
-            document.getElementById('message').textContent = 'Serviço colaborativo indisponível. Modo local ativo: mapa e marcadores disponíveis.';
+            document.getElementById('message').textContent = 'Serviço colaborativo indisponível. Modo local ativo (sem salvamento ou compartilhamento em nuvem).';
         }
         if (db) {
             locationsCollection = collection(db, `artifacts/${appId}/public/data/locations`);
@@ -163,8 +163,9 @@
             iconAnchor: [0, 20],
             popupAnchor: [10, -20]
         });
+        const normalizeCoordinate = (value) => Number(value).toFixed(6);
         const addLocationMarker = (lat, lon, city, state) => {
-            const locationId = `${lat},${lon}`;
+            const locationId = `${normalizeCoordinate(lat)},${normalizeCoordinate(lon)}`;
             if (addedLocations.has(locationId)) return false;
             L.marker([lat, lon], { icon: redPinIcon })
                 .bindPopup(`<b>${city}</b><br>${state}`)
@@ -321,7 +322,7 @@
                         showFeedback(`${cidade}, ${estado} adicionado ao mapa!`, 'success');
                     } else {
                         addLocationMarker(parsedLat, parsedLon, cidade, estado);
-                        showFeedback(`${cidade}, ${estado} marcado localmente (sem sincronização).`, 'success');
+                        showFeedback(`${cidade}, ${estado} marcado localmente (não será salvo após recarregar).`, 'success');
                     }
                     map.flyTo([parsedLat, parsedLon], 10);
                 } else {

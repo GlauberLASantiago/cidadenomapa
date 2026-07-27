@@ -126,6 +126,7 @@
             console.error("Invalid Firebase config JSON:", error);
         }
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-map-app';
+        // Explicit validation keeps the app in a predictable local fallback mode with clearer diagnostics.
         const requiredFirebaseKeys = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId'];
         const missingFirebaseKeys = requiredFirebaseKeys.filter((key) => !firebaseConfig?.[key]);
         const hasFirebaseConfig = missingFirebaseKeys.length === 0;
@@ -143,6 +144,7 @@
             setLogLevel('debug'); // Enable detailed logs for debugging
         } catch (e) {
             console.error("Firebase initialization failed:", e);
+            // Local mode keeps geocoding and map pinning active, but without Firestore sync between users.
             document.getElementById('message').textContent = 'Serviço colaborativo indisponível. Usando modo local.';
         }
 
@@ -159,6 +161,11 @@
             iconAnchor: [0, 20],
             popupAnchor: [10, -20]
         });
+        const addLocationMarker = (lat, lon, city, state) => {
+            L.marker([lat, lon], { icon: redPinIcon })
+                .bindPopup(`<b>${city}</b><br>${state}`)
+                .addTo(markersLayer);
+        };
         
         // --- AUTHENTICATION ---
         const authenticateUser = async () => {
@@ -189,9 +196,7 @@
                         const location = change.doc.data();
                         const locationId = `${location.lat},${location.lon}`;
                         if (!addedLocations.has(locationId)) {
-                            L.marker([location.lat, location.lon], { icon: redPinIcon })
-                                .bindPopup(`<b>${location.city}</b><br>${location.state}`)
-                                .addTo(markersLayer);
+                            addLocationMarker(location.lat, location.lon, location.city, location.state);
                             addedLocations.add(locationId);
                         }
                     }
@@ -309,9 +314,7 @@
                         await addDoc(locationsCollection, newLocation);
                         showFeedback(`${cidade}, ${estado} adicionado ao mapa!`, 'success');
                     } else {
-                        L.marker([parsedLat, parsedLon], { icon: redPinIcon })
-                            .bindPopup(`<b>${cidade}</b><br>${estado}`)
-                            .addTo(markersLayer);
+                        addLocationMarker(parsedLat, parsedLon, cidade, estado);
                         showFeedback(`${cidade}, ${estado} marcado localmente (modo offline).`, 'success');
                     }
                     map.flyTo([parsedLat, parsedLon], 10);

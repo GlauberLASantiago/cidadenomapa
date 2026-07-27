@@ -126,7 +126,7 @@
             console.error("Invalid Firebase config JSON:", error);
         }
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-map-app';
-        // Explicit validation keeps the app in a predictable local fallback mode with clearer diagnostics.
+        // Explicit validation keeps the app in a predictable fallback (local-only mode without Firestore sync) with clearer diagnostics.
         const requiredFirebaseKeys = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId'];
         const missingFirebaseKeys = requiredFirebaseKeys.filter((key) => !firebaseConfig?.[key]);
         const hasFirebaseConfig = missingFirebaseKeys.length === 0;
@@ -140,12 +140,14 @@
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
             auth = getAuth(app);
-            locationsCollection = collection(db, `artifacts/${appId}/public/data/locations`);
             setLogLevel('debug'); // Enable detailed logs for debugging
         } catch (e) {
             console.error("Firebase initialization failed:", e);
-            // Local mode keeps geocoding and map pinning active, but without Firestore sync between users.
+            // Fallback when Firebase fails: keep geocoding and map pinning active locally, but disable Firestore sync.
             document.getElementById('message').textContent = 'Serviço colaborativo indisponível. Usando modo local.';
+        }
+        if (db) {
+            locationsCollection = collection(db, `artifacts/${appId}/public/data/locations`);
         }
 
         // --- MAP INITIALIZATION ---
@@ -169,8 +171,8 @@
         
         // --- AUTHENTICATION ---
         const authenticateUser = async () => {
-            if (!auth || !locationsCollection) {
-                console.info("Authentication skipped: collaborative mode is unavailable.");
+            if (!auth) {
+                console.info("Authentication skipped: Firebase auth is unavailable.");
                 return;
             }
             try {
@@ -180,7 +182,11 @@
                     await signInAnonymously(auth);
                 }
                 console.log("User authenticated. UID:", auth.currentUser?.uid);
-                listenForLocations();
+                if (locationsCollection) {
+                    listenForLocations();
+                } else {
+                    console.info("Collaborative sync skipped: Firestore collection is unavailable.");
+                }
             } catch (error) {
                 console.error("Authentication failed:", error);
                 document.getElementById('message').textContent = 'Falha na autenticação para carregar o mapa.';

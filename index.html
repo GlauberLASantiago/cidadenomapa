@@ -128,7 +128,7 @@
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-map-app';
         // Explicit validation keeps the app in a predictable fallback (local-only mode without Firestore sync) with clearer diagnostics.
         const requiredFirebaseKeys = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId'];
-        const missingFirebaseKeys = requiredFirebaseKeys.filter((key) => !firebaseConfig?.[key]);
+        const missingFirebaseKeys = requiredFirebaseKeys.filter((key) => !firebaseConfig[key]);
         const hasFirebaseConfig = missingFirebaseKeys.length === 0;
         
         // --- FIREBASE INITIALIZATION ---
@@ -164,9 +164,13 @@
             popupAnchor: [10, -20]
         });
         const addLocationMarker = (lat, lon, city, state) => {
+            const locationId = `${lat},${lon}`;
+            if (addedLocations.has(locationId)) return false;
             L.marker([lat, lon], { icon: redPinIcon })
                 .bindPopup(`<b>${city}</b><br>${state}`)
                 .addTo(markersLayer);
+            addedLocations.add(locationId);
+            return true;
         };
         
         // --- AUTHENTICATION ---
@@ -200,11 +204,7 @@
                 snapshot.docChanges().forEach((change) => {
                     if (change.type === "added") {
                         const location = change.doc.data();
-                        const locationId = `${location.lat},${location.lon}`;
-                        if (!addedLocations.has(locationId)) {
-                            addLocationMarker(location.lat, location.lon, location.city, location.state);
-                            addedLocations.add(locationId);
-                        }
+                        addLocationMarker(location.lat, location.lon, location.city, location.state);
                     }
                 });
             }, (error) => {
@@ -321,7 +321,7 @@
                         showFeedback(`${cidade}, ${estado} adicionado ao mapa!`, 'success');
                     } else {
                         addLocationMarker(parsedLat, parsedLon, cidade, estado);
-                        showFeedback(`${cidade}, ${estado} marcado localmente (modo offline).`, 'success');
+                        showFeedback(`${cidade}, ${estado} marcado localmente (sem sincronização).`, 'success');
                     }
                     map.flyTo([parsedLat, parsedLon], 10);
                 } else {

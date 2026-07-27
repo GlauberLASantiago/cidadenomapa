@@ -126,7 +126,7 @@
             console.error("Invalid Firebase config JSON:", error);
         }
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-map-app';
-        const requiredFirebaseKeys = ['apiKey', 'authDomain', 'projectId'];
+        const requiredFirebaseKeys = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId'];
         const missingFirebaseKeys = requiredFirebaseKeys.filter((key) => !firebaseConfig?.[key]);
         const hasFirebaseConfig = missingFirebaseKeys.length === 0;
         
@@ -143,7 +143,7 @@
             setLogLevel('debug'); // Enable detailed logs for debugging
         } catch (e) {
             console.error("Firebase initialization failed:", e);
-            document.getElementById('message').textContent = 'Serviço colaborativo do mapa indisponível no momento.';
+            document.getElementById('message').textContent = 'Serviço colaborativo indisponível. Usando modo local.';
         }
 
         // --- MAP INITIALIZATION ---
@@ -162,7 +162,10 @@
         
         // --- AUTHENTICATION ---
         const authenticateUser = async () => {
-            if (!auth || !locationsCollection) return;
+            if (!auth || !locationsCollection) {
+                console.info("Authentication skipped: collaborative mode is unavailable.");
+                return;
+            }
             try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
